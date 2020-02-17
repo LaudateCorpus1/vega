@@ -30836,6 +30836,25 @@
       if ((x = +x, x !== x) || (y = +y, y !== y)) return false;
       return this.delaunay._step(i, x, y) === i;
     }
+    *neighbors(i) {
+      const ci = this._clip(i);
+      if (ci) for (const j of this.delaunay.neighbors(i)) {
+        const cj = this._clip(j);
+        // find the common edge
+        if (cj) loop: for (let ai = 0, li = ci.length; ai < li; ai += 2) {
+          for (let aj = 0, lj = cj.length; aj < lj; aj += 2) {
+            if (ci[ai] == cj[aj]
+            && ci[ai + 1] == cj[aj + 1]
+            && ci[(ai + 2) % li] == cj[(aj + lj - 2) % lj]
+            && ci[(ai + 3) % li] == cj[(aj + lj - 1) % lj]
+            ) {
+              yield j;
+              break loop;
+            }
+          }
+        }
+      }
+    }
     _cell(i) {
       const {circumcenters, delaunay: {inedges, halfedges, triangles}} = this;
       const e0 = inedges[i];
@@ -31019,6 +31038,11 @@
   }
 
   class Delaunay {
+    static from(points, fx = pointX, fy = pointY, that) {
+      return new Delaunay("length" in points
+          ? flatArray(points, fx, fy, that)
+          : Float64Array.from(flatIterable(points, fx, fy, that)));
+    }
     constructor(points) {
       this._delaunator = new Delaunator(points);
       this.inedges = new Int32Array(points.length / 2);
@@ -31083,13 +31107,13 @@
       return new Voronoi(this, bounds);
     }
     *neighbors(i) {
-      const {inedges, hull, _hullIndex, halfedges, triangles} = this;
+      const {inedges, hull, _hullIndex, halfedges, triangles, collinear} = this;
 
       // degenerate case with several collinear points
-      if (this.collinear) {
-        const l = this.collinear.indexOf(i);
-        if (l > 0) yield this.collinear[l - 1];
-        if (l < this.collinear.length - 1) yield this.collinear[l + 1];
+      if (collinear) {
+        const l = collinear.indexOf(i);
+        if (l > 0) yield collinear[l - 1];
+        if (l < collinear.length - 1) yield collinear[l + 1];
         return;
       }
 
@@ -31204,12 +31228,6 @@
       return polygon.value();
     }
   }
-
-  Delaunay.from = function(points, fx = pointX, fy = pointY, that) {
-    return new Delaunay("length" in points
-        ? flatArray(points, fx, fy, that)
-        : Float64Array.from(flatIterable(points, fx, fy, that)));
-  };
 
   function flatArray(points, fx, fy, that) {
     const n = points.length;
